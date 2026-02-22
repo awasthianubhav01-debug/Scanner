@@ -450,20 +450,25 @@ function handleBarcode(code) {
         setUI("scanning", "CHECKING...", "Validating new ID...");
     }
 
-    google.script.run
-        .withSuccessHandler(r => {
-            if(r.status === "NOT_EXIST") {
-                playSound('error');
-                setUI("error", "NOT EXIST", "ID not found in system.");
-            } else if(r.status === "Completed") {
-                playSound('error');
-                setUI("error", "DUPLICATE", `Order ${r.orderId} already done.`);
-            } else if(r.status === "Pending") {
-                setUI("success", "SCANNED", `ID: ${r.orderId} | ${r.scanned}/${r.total} (Left: ${r.left})`);
-            }
-            refreshData();
-        })
-        .processScan(code);
+   fetch("https://script.google.com/macros/s/AKfycbz8xuZ-HRBlq_HMf4piXg5ewHDD246hsSQoRo0IOQvYof35Umhp7oCcZDQiGua74DN1/exec",{
+  method:"POST",
+  body:JSON.stringify({orderId:code})
+})
+.then(r=>r.json())
+.then(r=>{
+  if(r.status==="NOT_EXIST"){
+    playSound('error');
+    setUI("error","NOT EXIST","ID not found");
+  }
+  else if(r.status==="Completed"){
+    playSound('error');
+    setUI("error","DUPLICATE",`Order ${r.orderId} already done`);
+  }
+  else{
+    setUI("success","SCANNED",`ID: ${r.orderId} | ${r.scanned}/${r.total} (Left: ${r.left})`);
+  }
+  refreshData();
+});
 
     setTimeout(() => { paused = false; }, 1500);
 }
@@ -488,67 +493,42 @@ function addOrder() {
   btn.innerText = "ADDING...";
   btn.disabled = true;
 
-  google.script.run
-    .withSuccessHandler(res => {
-      btn.innerText = "ADD ORDER";
-      btn.disabled = false;
-      if(res.error) {
-        playSound('error');
-        alert(res.error);
-      } else {
-        playSound('success');
-        idEl.value = ''; boxEl.value = ''; venEl.value = '';
-        refreshData();
-      }
-    })
-    .withFailureHandler(err => {
-      btn.innerText = "ADD ORDER";
-      playSound('error');
-      alert("Server Error: " + (err.message || err));
-    })
-    .addOrder(id, boxes, vendor);
-}
+fetch("YOUR_WEBAPP_URL",{
+  method:"POST",
+  body:JSON.stringify({
+    action:"addOrder",
+    orderId:id,
+    boxes:boxes,
+    vendor:vendor
+  })
+})
+.then(r=>r.json())
+.then(res=>{
+  btn.innerText="ADD ORDER";
+  btn.disabled=false;
+
+  if(res.error){
+    playSound('error');
+    alert(res.error);
+  }else{
+    playSound('success');
+    idEl.value='';boxEl.value='';venEl.value='';
+    refreshData();
+  }
+});
 
 // --- REFRESH DATA & CACHE ---
 function refreshData() {
-  google.script.run
-  .withFailureHandler(err => {
-     const msg = "Connection Error";
-     document.getElementById('recentList').innerHTML = `<div style='color:red;padding:10px'>${msg}</div>`;
-  })
-  .withSuccessHandler(data => {
-     if(data.error) {
-        document.getElementById('recentList').innerHTML = `<div style='color:red;padding:10px'>Error: ${data.error}</div>`;
-        return;
-     }
+fetch("YOUR_WEBAPP_URL")
+.then(r=>r.json())
+.then(data=>{
+   orderCache=data.last50||[];
 
-     orderCache = data.last50 || [];
+   document.getElementById('statScanned').innerText=data.stats.scannedLast30Min||0;
+   document.getElementById('statLeft').innerText=data.stats.totalLeft||0;
 
-     document.getElementById('statScanned').innerText = data.stats.scannedLast30Min || 0;
-     document.getElementById('statLeft').innerText = data.stats.totalLeft || 0;
-
-     const generateHTML = (rows) => {
-       if (!rows || rows.length === 0) return "<div style='color:#555; text-align:center; padding:20px;'>No orders found.</div>";
-       
-       return rows.map(r => {
-         let statusClass = r.status === 'Completed' ? 'Completed' : 'Pending';
-         return `
-           <div class="order-card">
-             <div class="order-info">
-               <div class="oid">${r.orderId}</div>
-               <div class="boxes">Total Boxes: ${r.total}</div>
-             </div>
-             <div class="badge ${statusClass}">${r.scanned}/${r.total}</div>
-           </div>
-         `;
-       }).join('');
-     };
-
-     document.getElementById('recentList').innerHTML = generateHTML(data.last5);
-     document.getElementById('historyList').innerHTML = generateHTML(data.last50);
-
-  }).getDashboardData();
-}
+   // keep your existing generateHTML logic
+});
 
 // --- NAV ---
 function openDrawer() {
