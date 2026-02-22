@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>TWF Dispatch</title>
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
+  <style>
+    :root {
+      --bg-dark: #121212;
+      --card-bg: #1E1E1E;
+      --primary: #BB86FC;
+      --accent: #03DAC6;
+      --red: #CF6679;
+      --text-main: #FFFFFF;
+      --text-sec: #AAAAAA;
+    }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      touch-action: manipulation;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px 20px;
+      background: var(--card-bg);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      z-index: 10;
+    }
+    .header h1 { font-size: 18px; margin: 0; letter-spacing: 1px; }
+    .menu-btn { font-size: 24px; background: none; border: none; color: var(--text-main); cursor: pointer; }
+
+    .stats-bar {
+      display: flex;
+      justify-content: space-around;
+      padding: 15px;
+      background: #252525;
+      border-bottom: 1px solid #333;
+    }
+    .stat-box { text-align: center; }
+    .stat-val { font-size: 24px; font-weight: bold; color: var(--accent); }
+    .stat-label { font-size: 11px; color: var(--text-sec); text-transform: uppercase; }
+
+    .main-content {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: 20px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .scanner-container {
+      position: relative;
+      width: 90%;
+      margin: 20px auto;
+      background: #000;
+      border-radius: 15px;
+      overflow: hidden;
+      aspect-ratio: 4/3; 
+      box-shadow: 0 0 20px rgba(187, 134, 252, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none; 
+    }
+
+    .start-btn {
+      padding: 15px 30px;
+      background: var(--primary);
+      color: #000;
+      border: none;
+      border-radius: 30px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 5;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .scan-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 70%;
+      height: 40%;
+      border: 2px solid var(--primary);
+      border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+      pointer-events: none;
+      display: none; 
+    }
+
+    .feedback-card {
+      margin: 0 20px 20px 20px;
+      padding: 20px;
+      background: var(--card-bg);
+      border-radius: 12px;
+      text-align: center;
+      min-height: 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: background 0.3s;
+    }
+    .status-title { font-size: 22px; font-weight: bold; margin-bottom: 5px; }
+    .status-sub { font-size: 14px; color: var(--text-sec); word-break: break-all; }
+    .success { background: #1B4332; color: #40916C; }
+    .error { background: #4A1C1C; color: #F48FB1; border: 2px solid var(--red); }
+    .scanning { background: #0D47A1; color: #64B5F6; }
+
+    .add-section {
+      background: var(--card-bg);
+      margin: 0 20px 20px 20px;
+      padding: 20px;
+      border-radius: 12px;
+    }
+    .input-group { display: flex; gap: 10px; margin-bottom: 10px; }
+    input {
+      flex: 1;
+      background: #333;
+      border: 1px solid #444;
+      color: white;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 16px;
+    }
+    .btn-add {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .list-section { padding: 0 20px; }
+    .section-title { color: var(--text-sec); font-size: 14px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    
+    .order-card {
+      background: var(--card-bg);
+      padding: 15px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .order-info { display: flex; flex-direction: column; }
+    .oid { font-weight: bold; font-size: 16px; }
+    .boxes { font-size: 12px; color: var(--text-sec); margin-top: 2px; }
+    
+    .badge { 
+      background: #333; 
+      padding: 5px 10px; 
+      border-radius: 20px; 
+      font-size: 14px; 
+      font-weight: bold;
+      color: var(--accent);
+      text-align: center;
+    }
+    .badge.Completed { color: #666; background: #222; }
+    .badge.Pending { color: var(--accent); }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: -100%;
+      width: 85%;
+      max-width: 350px;
+      height: 100%;
+      background: var(--bg-dark);
+      z-index: 100;
+      transition: right 0.3s ease;
+      box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+    }
+    .drawer.open { right: 0; }
+    .drawer-head {
+      padding: 20px;
+      background: var(--card-bg);
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      border-bottom: 1px solid #333;
+    }
+    .back-btn {
+      background: none;
+      border: none;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0 10px;
+    }
+    .drawer-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .overlay {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      z-index: 99;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s;
+    }
+    .overlay.active { opacity: 1; pointer-events: auto; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>TWF FLOURS DISPATCH</h1>
+  <button class="menu-btn" onclick="openDrawer()">☰</button>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-box">
+    <div id="statScanned" class="stat-val">0</div>
+    <div class="stat-label">Scanned (30m)</div>
+  </div>
+  <div class="stat-box">
+    <div id="statLeft" class="stat-val">0</div>
+    <div class="stat-label">Total Left</div>
+  </div>
+</div>
+
+<div class="main-content">
+  
+  <!-- Scanner -->
+  <div class="scanner-container">
+    <button id="startBtn" class="start-btn" onclick="initCamera()">START SCANNER</button>
+    <video id="video" playsinline autoplay muted></video>
+    <div id="overlay" class="scan-overlay"></div>
+  </div>
+
+  <!-- Feedback -->
+  <div id="feedbackBox" class="feedback-card">
+    <div id="statusText" class="status-title">READY</div>
+    <div id="statusSub" class="status-sub">Tap button above to start</div>
+  </div>
+
+  <!-- Add Order -->
+  <div class="add-section">
+    <div class="input-group">
+      <input id="oid" placeholder="Order ID">
+      <input id="box" type="number" placeholder="Boxes">
+    </div>
+    <div class="input-group">
+      <input id="vendor" placeholder="Vendor">
+    </div>
+    <button class="btn-add" onclick="addOrder()">ADD ORDER</button>
+  </div>
+
+  <!-- Recent 5 -->
+  <div class="list-section">
+    <div class="section-title">Last 5 Punches</div>
+    <div id="recentList">Connecting...</div>
+  </div>
+
+</div>
+
+<!-- Drawer -->
+<div class="overlay" onclick="closeDrawer()"></div>
+<div id="drawer" class="drawer">
+  <div class="drawer-head">
+    <button class="back-btn" onclick="closeDrawer()">←</button>
+    <h3>Last 50 Orders</h3>
+  </div>
+  <div id="historyList" class="drawer-body">Connecting...</div>
+</div>
+
+<!-- AUDIO -->
+<audio id="soundSuccess" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg" preload="auto"></audio>
+<audio id="soundError" src="https://actions.google.com/sounds/v1/alarms/alert_signal.ogg" preload="auto"></audio>
+
+<script>
+// --- GLOBALS ---
+const codeReader = new ZXing.BrowserMultiFormatReader();
+let paused = false;
+let videoElement = document.getElementById('video');
+let orderCache = []; 
+let currentStream = null;
+
+// --- AUDIO (Instant Trigger) ---
+function playSound(type) {
+  try {
+    const soundId = type === 'success' ? 'soundSuccess' : 'soundError';
+    const sound = document.getElementById(soundId);
+    sound.currentTime = 0;
+    sound.play();
+    if(navigator.vibrate) navigator.vibrate(type === 'success' ? 100 : [100, 50, 100]);
+  } catch(e) {}
+}
+
+// --- UI ---
+function setUI(status, title, sub) {
+  const box = document.getElementById('feedbackBox');
+  box.className = 'feedback-card ' + status;
+  document.getElementById('statusText').innerText = title;
+  document.getElementById('statusSub').innerText = sub;
+}
+
+// --- CAMERA LOGIC (MANUAL GETUSERMEDIA) ---
+async function initCamera() {
+    // 1. Hide the start button, show video and overlay
+    document.getElementById('startBtn').style.display = 'none';
+    videoElement.style.display = 'block';
+    document.getElementById('overlay').style.display = 'block';
+    setUI("scanning", "STARTING", "Requesting camera...");
+
+    // 2. Clean up any old stream
+    if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+    }
+
+    // 3. Try to get the camera stream (back camera preferred)
+    try {
+        const constraints = { video: { facingMode: { ideal: "environment" } } };
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        // 4. Attach stream to video element
+        videoElement.srcObject = currentStream;
+        
+        // 5. Play video when ready
+        videoElement.onloadedmetadata = () => {
+            videoElement.play()
+                .then(() => {
+                    setUI("success", "CAMERA WORKING", "You should see video now");
+                })
+                .catch(e => {
+                    setUI("error", "PLAY ERROR", e.message);
+                });
+        };
+    } catch (err) {
+        // 6. If back camera fails, try any camera
+        try {
+            currentStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            videoElement.srcObject = currentStream;
+            videoElement.onloadedmetadata = () => {
+                videoElement.play()
+                    .then(() => {
+                        setUI("success", "CAMERA WORKING", "You should see video now");
+                    })
+                    .catch(e => {
+                        setUI("error", "PLAY ERROR", e.message);
+                    });
+            };
+        } catch (finalErr) {
+            // 7. Handle total failure
+            handleCameraError(finalErr);
+        }
+    }
+}
+
+function startScanning() {
+    setUI("scanning", "SCANNING", "Point at barcode");
+    
+    // We use decodeFromVideoElement because we manually set up the stream
+    codeReader.decodeFromVideoElement(videoElement, (result, err) => {
+        if (result && !paused) {
+            handleBarcode(result.text);
+        }
+        if (err && !(err.name === 'NotFoundException')) {
+            console.warn("Scan loop issue", err.name);
+        }
+    });
+}
+
+function handleCameraError(err) {
+    console.error("Camera Error", err);
+    let title = "CAMERA ERROR";
+    let sub = err.name;
+    
+    if (err.name === 'NotAllowedError') {
+        title = "PERMISSION DENIED";
+        sub = "You blocked the camera. Tap the lock icon in the URL bar, set Camera to 'Allow', and refresh.";
+    } else if (err.name === 'NotFoundError') {
+        title = "NO CAMERA";
+        sub = "No camera hardware found on this device.";
+    } else if (err.name === 'NotReadableError') {
+        title = "CAMERA BUSY";
+        sub = "Camera is used by another application.";
+    } else if (err.name === 'OverconstrainedError') {
+        title = "CONSTRAINT ERROR";
+        sub = "Could not satisfy camera requirements.";
+    } else {
+        sub = err.message || "Unknown error";
+    }
+    
+    setUI("error", title, sub);
+    showStartButton();
+}
+
+function showStartButton() {
+    document.getElementById('startBtn').style.display = 'block';
+    videoElement.style.display = 'none';
+    if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+    }
+    codeReader.reset();
+}
+
+// --- BARCODE HANDLING (INSTANT UI) ---
+function handleBarcode(code) {
+    paused = true; 
+    playSound('success');
+    setUI("scanning", "SCANNING...", "ID: " + code);
+
+    const cachedOrder = orderCache.find(o => String(o.orderId).trim() === String(code).trim());
+    
+    if (cachedOrder) {
+        if (cachedOrder.status === "Completed") {
+            playSound('error');
+            setUI("error", "DUPLICATE", `Order ${code} already done.`);
+        } else {
+            cachedOrder.scanned = (cachedOrder.scanned || 0) + 1;
+            if (cachedOrder.scanned >= cachedOrder.total) {
+                cachedOrder.status = "Completed";
+                setUI("success", "SCANNED", `ID: ${code} | ${cachedOrder.scanned}/${cachedOrder.total} (Done)`);
+            } else {
+                setUI("success", "SCANNED", `ID: ${code} | ${cachedOrder.scanned}/${cachedOrder.total}`);
+            }
+            refreshData();
+        }
+    } else {
+        setUI("scanning", "CHECKING...", "Validating new ID...");
+    }
+
+    google.script.run
+        .withSuccessHandler(r => {
+            if(r.status === "NOT_EXIST") {
+                playSound('error');
+                setUI("error", "NOT EXIST", "ID not found in system.");
+            } else if(r.status === "Completed") {
+                playSound('error');
+                setUI("error", "DUPLICATE", `Order ${r.orderId} already done.`);
+            } else if(r.status === "Pending") {
+                setUI("success", "SCANNED", `ID: ${r.orderId} | ${r.scanned}/${r.total} (Left: ${r.left})`);
+            }
+            refreshData();
+        })
+        .processScan(code);
+
+    setTimeout(() => { paused = false; }, 1500);
+}
+
+// --- ADD ORDER ---
+function addOrder() {
+  const idEl = document.getElementById('oid');
+  const boxEl = document.getElementById('box');
+  const venEl = document.getElementById('vendor');
+  
+  const id = idEl.value.trim();
+  const boxes = boxEl.value.trim();
+  const vendor = venEl.value.trim();
+
+  if(!id || !boxes) { 
+    playSound('error');
+    alert("ID and Boxes required!"); 
+    return; 
+  }
+
+  const btn = document.querySelector('.btn-add');
+  btn.innerText = "ADDING...";
+  btn.disabled = true;
+
+  google.script.run
+    .withSuccessHandler(res => {
+      btn.innerText = "ADD ORDER";
+      btn.disabled = false;
+      if(res.error) {
+        playSound('error');
+        alert(res.error);
+      } else {
+        playSound('success');
+        idEl.value = ''; boxEl.value = ''; venEl.value = '';
+        refreshData();
+      }
+    })
+    .withFailureHandler(err => {
+      btn.innerText = "ADD ORDER";
+      playSound('error');
+      alert("Server Error: " + (err.message || err));
+    })
+    .addOrder(id, boxes, vendor);
+}
+
+// --- REFRESH DATA & CACHE ---
+function refreshData() {
+  google.script.run
+  .withFailureHandler(err => {
+     const msg = "Connection Error";
+     document.getElementById('recentList').innerHTML = `<div style='color:red;padding:10px'>${msg}</div>`;
+  })
+  .withSuccessHandler(data => {
+     if(data.error) {
+        document.getElementById('recentList').innerHTML = `<div style='color:red;padding:10px'>Error: ${data.error}</div>`;
+        return;
+     }
+
+     orderCache = data.last50 || [];
+
+     document.getElementById('statScanned').innerText = data.stats.scannedLast30Min || 0;
+     document.getElementById('statLeft').innerText = data.stats.totalLeft || 0;
+
+     const generateHTML = (rows) => {
+       if (!rows || rows.length === 0) return "<div style='color:#555; text-align:center; padding:20px;'>No orders found.</div>";
+       
+       return rows.map(r => {
+         let statusClass = r.status === 'Completed' ? 'Completed' : 'Pending';
+         return `
+           <div class="order-card">
+             <div class="order-info">
+               <div class="oid">${r.orderId}</div>
+               <div class="boxes">Total Boxes: ${r.total}</div>
+             </div>
+             <div class="badge ${statusClass}">${r.scanned}/${r.total}</div>
+           </div>
+         `;
+       }).join('');
+     };
+
+     document.getElementById('recentList').innerHTML = generateHTML(data.last5);
+     document.getElementById('historyList').innerHTML = generateHTML(data.last50);
+
+  }).getDashboardData();
+}
+
+// --- NAV ---
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.querySelector('.overlay').classList.add('active');
+}
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.querySelector('.overlay').classList.remove('active');
+}
+
+// --- VISIBILITY HANDLING ---
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === 'visible') {
+    // Do nothing automatic
+  } else {
+    codeReader.reset(); 
+    if (currentStream) currentStream.getTracks().forEach(track => track.stop());
+    showStartButton();
+  }
+});
+
+// Init Data
+refreshData();
+
+</script>
+</body>
+</html>
